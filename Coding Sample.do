@@ -1,0 +1,445 @@
+use "/Users/wsjsmac/Desktop/Environmental Eco/Data Analysis/CGSS2021.dta"
+//----------Control Variable-------------
+gen gender=0
+replace gender=1 if A2==2
+//Gender, male=0，female=1
+
+gen edu=0
+replace edu=6 if A7a==3
+replace edu=9 if A7a==4
+replace edu=12 if (A7a==5 | A7a==6 | A7a==7 | A7a==8)
+replace edu=15 if (A7a==9 | A7a==10)
+replace edu=16 if (A7a==11 | A7a==12)
+replace edu=19 if A7a==13
+//Education
+
+gen age=2021-A3_1
+//Age
+
+drop if age<16
+gen age1=0
+replace age1=1 if (age>=16 & age<=25)
+replace age1=2 if (age>=26 & age<=35)
+replace age1=3 if (age>=36 & age<=45)
+replace age1=4 if (age>=46 & age<=55)
+replace age1=5 if (age>=56 & age<=65)
+replace age1=6 if (age>=66 & age<=75)
+//replace age1=7 if (age>=76)
+drop if age1==0
+
+gen smoke=0
+replace smoke=1 if E18==1
+//now smoke=1，regradless of previous
+
+gen drink=0
+replace drink=1 if (E19==1 | E19==2)
+//Drink alcohol. Drink several times a day + several times a week = drink, ==1. Others are 0
+
+gen exer=0
+replace exer=1 if (E21==7 | E21==8 | E21==9| E21==10)
+//Exercise. Divided into low intensity and high intensity, weekly frequency, according to at least half an hour of exercise every day, >=3 hours is high intensity
+//High intensity =1, low intensity =0
+
+gen sleep=0
+replace sleep=1 if (E24==1 | E24==2)
+//Sleep quality. Divided into good and bad. Good =1, bad =0
+
+gen medtest=0
+replace medtest=1 if E25==1
+//Get regular checkups. Regular =1, irregular/no physical examination =0
+
+gen agri=2
+replace agri=1 if A58==1
+replace agri=0 if (A58==2 | A58==3)
+//(non) agricultural work. Non-farm =1, farm =0, unemployed =2.
+
+gen fm=A1+1
+
+gen lnfm=ln(A1+1)
+//Family porple
+
+gen lnage=ln(age)
+//No, not significant
+
+gen lnage2=ln(age)*ln(age)
+
+//gen lnincomeld=ln(A8b)
+//not significant
+
+gen mar=1
+replace mar=0 if (A69==6 | A69==7)
+//Married/cohabiting =1, divorced/widowed =0
+
+//type village committee/neighborhood committee, ==1 is the neighborhood committee, =0 is the village committee.
+
+encode provinces, gen (prov)
+//gen prov=0
+//replace prov=1 if provinces=="Beijing"
+//Generate provincial code
+
+
+
+
+//---------------dependent variables, independent variables, and moderating variables------------
+
+gen work=0 
+//work=0 is exit from the labor market
+replace work=1 if (A54==4 | A54==5 | A53==2 | A53==3 | A53==4)
+//work=1 is unemployed + still working
+drop if (A54==1|A54==3|A54==9|A54==98|A54==99)
+//Remove people who are not participating in the labor market
+
+gen envi=0
+replace envi=1 if (P22_a==2 |P22_a==3 |P22_a==4 | P22_a==5)
+replace envi=1 if (E35_A ==1 | E35_A ==2)
+drop if (P22_a==98)
+
+
+gen health=0
+replace health=1 if ((A15==3 | A15==4 | A15==5) & (A17==3 | A17==4 | A17==5) )
+//Only physical and mental health were considered, and chronic diseases and disabilities were not taken into account
+
+gen insurance=0
+replace insurance =1 if (A61_1==1 & A61_3==1)
+//Medical insurance "Yes/no"
+
+gen income=0
+drop if (A8a==9999997 | A8a==9999998 | A8a==9999999)
+drop if (A8b==9999997 | A8b==9999998 | A8b==9999999)
+su A8b, detail
+egen aveA8a=mean(A8a)
+replace income=1 if A8a>= aveA8a
+//tab A8b
+//A8a is personal gross income
+//A8b is personal labor income
+//income Divides high income into low income according to the average income level
+// Perhaps robustness can be grouped according to the median
+// Avoid and work endogenous, using household income A8a
+
+gen inequal=health+insurance+income
+tab inequal
+
+
+gen healthfeel=0
+replace healthfeel=1 if (A16==1 | A16==2 | A16==3)
+//If perceive the impact of your health on your work,==1
+
+
+
+//------------Descriptive Analysis-----------------
+//tabstat varlist, s(mean sd min max N) f(%12.3f) c(s)
+//logout, save(mytable) word replace
+logout, save(des) word replace: tabstat work envi healthfeel inequal gender age1 edu fm mar type prov agri smoke drink exer sleep medtest, s(mean sd min max N) f(%12.3f) c(s)
+
+logout, save(des2) word replace: tabstat health insurance income, s(mean sd min max N) f(%12.3f) c(s)
+
+
+
+//------------Regression Analysis-----------------
+//sgmediation2 work, mv(healthfeel) iv(income) cv(agri gender mar edu age1 type prov smoke drink sleep medtest fm)
+//bootstrap r(ind_eff) r(dir_eff), reps(1000): sgmediation work, mv(healthfeel) iv(envi) cv(gender agri lnfm mar type prov edu lnedu lnage lnage2 smoke drink sleep medtest)
+//Test coefficient ab
+* ind_eff indicates indirect effects
+* dir_eff indicates direct effect
+* Patent is the dependent variable
+* mv is the intermediate variable
+* iv is the independent variable
+* cv is the control variable
+//----------1. Stepwise regression----------
+eststo clear
+logit work inequal gender age1 edu agri type prov
+est store m1
+logit work inequal gender age1 edu fm agri type prov
+est store m2
+logit work inequal gender age1 edu fm mar agri type prov
+est store m3
+logit work inequal gender age1 edu fm mar smoke agri type prov
+est store m4
+logit work inequal gender age1 edu fm mar smoke drink agri type prov
+est store m5
+logit work inequal gender age1 edu fm mar smoke drink exer agri type prov
+est store m6
+logit work inequal gender age1 edu fm mar smoke drink exer sleep agri type prov
+est store m7
+logit work inequal gender age1 edu fm mar smoke drink exer sleep medtest agri type prov
+est store m8
+esttab m1 m2 m3 m4 m5 m6 m7 m8 using reg_stepwise_regression.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("model1" "model2""model3""model4""model5""model6""model7""model8") title("Table1")
+
+
+
+//------------2. healthfeel mediating effect
+eststo clear
+logit work inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+//The control variables don't have Age or Education. If there is, it's not significant. It's a direct intermediary
+est store m4
+//4 c', total mediating effect
+
+//-----------Centerization moderating effect----------
+//Methods：
+//center X Z
+//After the variable is centralized, we generate a centralized interaction term.
+//gen XZ_c=c_X*c_Z
+//reg Y X Z XZ_c
+center envi inequal 
+gen XZ_c=c_inequal*c_envi
+logit healthfeel inequal envi XZ_c agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m5
+//5 moderating
+esttab m1 m2 m3 m4 m5 using reg_total_mediate_moderate.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'" "moderating effect") title("Table1")
+
+//-----------The mediation effect further discuss--------------
+//------1. health-------
+eststo clear
+logit work health agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel health agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel health agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m4
+//4 c', total mediating effect
+//second half is insignificant
+esttab m1 m2 m3 m4 using reg_mediate_health.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'") title("Table1")
+
+
+//--------2. insurance-------
+eststo clear
+logit work insurance agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel insurance agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel insurance agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m4
+//4 c', total mediating effect
+//first half is insignificant
+esttab m1 m2 m3 m4 using reg_mediate_insurance.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'") title("Table1")
+
+
+//-------3. income------
+eststo clear
+logit work income agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel income agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel income agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m4
+//4 c', total mediating effect
+//a and b are significant
+esttab m1 m2 m3 m4 using reg_mediate_income.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'") title("Table1")
+
+//-------4. health+insurance------
+gen inequal2=health+insurance
+eststo clear
+logit work inequal2 agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel inequal2 agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel inequal2 agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m4
+//4 c', total mediating effect
+//Significant, indicating that health should be considered along with insurance
+esttab m1 m2 m3 m4 using reg_mediate_health+insurance.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'") title("Table1")
+
+
+//--------moderate effects, combine in a table----------
+drop XZ_c c_inequal c_envi
+center envi inequal health insurance income
+gen XZ_c=c_inequal*c_envi
+gen XZ_c1=c_health*c_envi
+gen XZ_c2=c_insurance*c_envi
+gen XZ_c3=c_income*c_envi
+eststo clear
+logit healthfeel inequal envi XZ_c agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m1
+logit healthfeel health envi XZ_c1 agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m2
+logit healthfeel insurance envi XZ_c2 agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m3
+logit healthfeel income envi XZ_c3 agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m4
+esttab m1 m2 m3 m4 using reg_4_moderate.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("moderate" "health" "insurance" "income") title("Table1")
+
+//---------Robustness test--------
+//----------1. Air pollution High pollution, low pollution measurement-------------
+gen envi1=0
+replace envi1=1 if (P22_a==3 |P22_a==4 | P22_a==5)
+replace envi1=1 if (E35_A ==1 | E35_A ==2)
+eststo clear
+logit work inequal gender age1 edu fm mar smoke drink exer sleep medtest agri type prov
+est store m1
+//Baseline regression
+
+center envi1
+gen XZ1_c=c_inequal*c_envi1
+logit healthfeel inequal envi1 XZ_c agri gender mar type prov edu age1 smoke drink sleep medtest fm
+est store m2
+//Moderating effect
+esttab m1 m2 using reg_envi_robust.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("Baseline regression" "Moderating effect") title("Table1")
+
+
+//----------2. Health perception High pollution, low pollution measurement-------------
+gen healthfeel1=0
+replace healthfeel1=1 if (A16==1 | A16==2)
+
+eststo clear
+logit work inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m1
+//1 c, mediating effect
+logit healthfeel1 inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m2
+//2 a, mediating effect the first half
+logit work healthfeel1 agri gender mar edu age1 type prov smoke drink sleep medtest fm
+est store m3
+//3 b, mediating effect the second half
+logit work healthfeel1 inequal agri gender mar edu age1 type prov smoke drink sleep medtest fm
+// The control variables excl Age or Education. If there is, it's not significant. It's a direct intermediary
+est store m4
+//4 c', total mediating effect
+
+esttab m1 m2 m3 m4 using reg_healthfeel_robust.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("c" "a" "b" "c'") title("Table1")
+
+
+//----------3. Income Measure------
+//----------3.1 Labor income
+gen income1=0
+egen aveA8b=mean(A8b)
+replace income1=1 if A8b>= aveA8b
+//tab A8b
+//A8a is personal gross income
+//A8b is personal labor income
+//income Divides high income into low income according to the average income level
+// Perhaps robustness can be grouped according to the median
+// Avoid and work endogenous, using household income A8a
+
+gen inequal1=health+insurance+income1
+eststo clear
+logit work inequal1 gender age1 edu agri type prov
+est store m1
+logit work inequal1 gender age1 edu fm agri type prov
+est store m2
+logit work inequal1 gender age1 edu fm mar agri type prov
+est store m3
+logit work inequal1 gender age1 edu fm mar smoke agri type prov
+est store m4
+logit work inequal1 gender age1 edu fm mar smoke drink agri type prov
+est store m5
+logit work inequal1 gender age1 edu fm mar smoke drink exer agri type prov
+est store m6
+logit work inequal1 gender age1 edu fm mar smoke drink exer sleep agri type prov
+est store m7
+logit work inequal1 gender age1 edu fm mar smoke drink exer sleep medtest agri type prov
+est store m8
+esttab m1 m2 m3 m4 m5 m6 m7 m8 using reg_income_robust1.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("model1" "model2""model3""model4""model5""model6""model7""model8") title("Table1")
+
+//----------3.2 Family Income
+gen income3=0
+egen aveA62=mean(A62)
+replace income3=1 if A62>= aveA62
+//tab A8b
+//A8a is personal gross income
+//A8b is personal labor income
+//income Divides high income into low income according to the average income level
+// Perhaps robustness can be grouped according to the median
+// Avoid and work endogenous, using household income A8a
+
+gen inequal3=health+insurance+income3
+eststo clear
+logit work inequal3 gender age1 edu agri type prov
+est store m1
+logit work inequal3 gender age1 edu fm agri type prov
+est store m2
+logit work inequal3 gender age1 edu fm mar agri type prov
+est store m3
+logit work inequal3 gender age1 edu fm mar smoke agri type prov
+est store m4
+logit work inequal3 gender age1 edu fm mar smoke drink agri type prov
+est store m5
+logit work inequal3 gender age1 edu fm mar smoke drink exer agri type prov
+est store m6
+logit work inequal3 gender age1 edu fm mar smoke drink exer sleep agri type prov
+est store m7
+logit work inequal3 gender age1 edu fm mar smoke drink exer sleep medtest agri type prov
+est store m8
+esttab m1 m2 m3 m4 m5 m6 m7 m8 using reg_income_robust2.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("model1" "model2""model3""model4""model5""model6""model7""model8") title("Table1")
+
+//---------Discuss the labor supply of married women--------
+gen gender1=gender+1
+gen marfe=0
+eststo clear
+sort mar
+by mar: logit work inequal3 gender age1 edu fm smoke drink exer sleep medtest agri type prov
+est store m1
+sort gender1
+by gender1: logit work inequal3 age1 edu fm mar smoke drink exer sleep medtest agri type prov
+est store m2
+replace marfe=1 if (gender==0 & mar==1)
+sort marfe
+by marfe: logit work inequal3 age1 edu fm smoke drink exer sleep medtest agri type prov
+est store m3
+esttab m1 m2 m3 using reg_income_Marital_gender_grouping_returns.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("married" "women" "married women") title("Table1")
+
+
+
+
+
+
+
+//----------Grouping regression----------
+//----------1. Smoking---------
+sort smoke
+eststo clear
+by smoke: logit work inequal agri gender mar edu age1 type prov drink sleep medtest fm
+est store m1
+
+//----------2. Drinking---------
+sort drink
+eststo clear
+by drink: logit work inequal agri gender mar edu age1 type prov smoke sleep medtest fm
+est store m2
+
+//----------3. Sleeping---------
+sort sleep
+eststo clear
+by sleep: logit work inequal agri gender mar edu age1 type prov smoke drink medtest fm
+est store m3
+
+//----------4. Physical examination---------
+sort medtest
+eststo clear
+by medtest: logit work inequal agri gender mar edu age1 type prov smoke drink sleep fm
+est store m4
+
+esttab m1 m2 m3 m4 using reg_group.rtf, replace b(%6.3f) se(%6.3f) se pr2(3) star(* 0.1 ** 0.05 *** 0.01) compress nogap mtitles("smoke" "drink" "sleep" "physical examination") title("Table1")
+
+
+
+
+
