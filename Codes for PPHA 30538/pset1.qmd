@@ -1,0 +1,455 @@
+---
+title: "PSet 1"
+author: "Sijie Wu"
+date: "today"
+format: 
+  html:
+    toc: true
+    number-sections: true
+    html-math-method: katex
+execute:
+  eval: true
+  echo: true
+---
+
+1. **PS1:** Due Sat Oct 5 at 5:00PM Central. Worth 50 points. Initiate your **[repo](https://classroom.github.com/a/uhUVze3Y)** 
+
+
+2. "This submission is my work alone and complies with the 30538 integrity
+policy." Add your initials to indicate your agreement: \*\*SW\*\*
+1. "I have uploaded the names of anyone I worked with on the problem set **[here](https://docs.google.com/forms/d/1-zzHx762odGlpVWtgdIC55vqF-j3gqdAp6Pno1rIGK0/edit)**"  \*\*I complete my problem set independently\*\* (1 point)
+2. Late coins used this pset: \*\*0\*\* Late coins left after submission: \*\*4\*\*
+3. Knit your `ps1.qmd` to make `ps1.pdf`. 
+    * The PDF should not be more than 25 pages. Use `head()` and re-size figures when appropriate. 
+4. Push  `ps1.qmd` and `ps1.pdf` to your github repo. It is fine to use Github Desktop.
+5. Submit `ps1.pdf` via Gradescope (4 points) 
+6. Tag your submission in Gradescope
+
+
+
+# Read in one percent sample (15 Points)
+
+1.  
+```{python}
+import pandas as pd
+df = pd.read_csv('/Users/wsjsmac/Desktop/Autumn/PPHA 30538/problem-set-1-sijiewu12/Pset 1/data/parking_tickets_one_percent.csv')
+df.head()
+
+import  timeit
+def run_time():
+    df = pd.read_csv('/Users/wsjsmac/Desktop/Autumn/PPHA 30538/problem-set-1-sijiewu12/Pset 1/data/parking_tickets_one_percent.csv')
+    pass
+
+runtime = timeit.timeit(run_time, number = 1)
+print(f"The run time is {runtime:.4f} seconds")
+
+```
+
+
+
+2. 
+```{python}
+assert len(df) == 287458, f"Number of rows is {len(df)}, but expected 287458"
+print("Assertion passed!")
+
+import os
+def get_file_size(file_path):
+    file_size = os.path.getsize(file_path)
+    file_size_mb = file_size/(1024 * 1024)
+    return file_size_mb
+
+file_path = "/Users/wsjsmac/Desktop/Autumn/PPHA 30538/problem-set-1-sijiewu12/Pset 1/data/parking_tickets_one_percent.csv"
+size = get_file_size(file_path)
+full_size = get_file_size(file_path) * 100
+print(f"The size of this CSV file is {size:.2f} MB.")
+print(f"The size of full data file is {full_size:.2f} MB.")
+
+```
+
+
+
+3.  
+
+Below is under the help of ChatGPT, I ask it by starting with "find out if this dataset sorted by a certain column by default. And which column is it?" It gieves me the answer without the list. And give the code, which I run and find out the answer is `Unnamed: 0`.
+
+As looking up the first 5 lines, I think this data set is also sorted by `ticket_number` and `issue_date`. So I ask it with "what if the dataset is sorted by two columns?", but the code it offers fails to come up with the answer.
+
+Then I cite the `.is_monotonic` function, continue to ask "what if use this function to check whether the dataset is sorted by two columns?"
+
+And "using code like this, but write a loop to check whether this dataset is multiple sorted"
+
+And "why I put forward the question is that, there exist a column called `Unnamed: 0`, which order my data by numirical order. But I believe my data is sorted by `ticket_number` and `issue_date` instead"
+
+Then I realize maybe I need to set up a list to store all the fitted columns, and then print them. So I ask "when find out the column `is_monotonic`, can we store them in a list and print them all?"
+
+And that is the final code below.
+
+```{python}
+
+
+# List to store columns that are monotonic
+monotonic_columns = []
+
+# Check each column to see if it is monotonic
+for column in df.columns:
+    if df[column].is_monotonic_increasing:
+        monotonic_columns.append(f"{column} (increasing)")
+    elif df[column].is_monotonic_decreasing:
+        monotonic_columns.append(f"{column} (decreasing)")
+
+# Print all monotonic columns
+if monotonic_columns:
+    print("The following columns are sorted:")
+    for column in monotonic_columns:
+        print(f"- {column}")
+else:
+    print("No columns are sorted in the dataset.")
+
+```
+
+This data is sorted by `Unnamed: 0`.
+
+```{python}
+
+df1 = df.head(500)
+
+# List to store columns that are monotonic
+monotonic_columns = []
+
+# Check each column to see if it is monotonic
+for column in df.columns:
+    if df1[column].is_monotonic_increasing:
+        monotonic_columns.append(f"{column} (increasing)")
+    elif df1[column].is_monotonic_decreasing:
+        monotonic_columns.append(f"{column} (decreasing)")
+
+# Print all monotonic columns
+if monotonic_columns:
+    print("The following columns are sorted:")
+    for column in monotonic_columns:
+        print(f"- {column}")
+else:
+    print("No columns are sorted in the dataset.")
+
+```
+
+The subset of the first 500 rows of the sample dataset is selected, and they are sorted by `Unnamed: 0` and `issue_date`.
+
+
+# Cleaning the data and benchmarking (15 Points)
+
+1.  
+```{python}
+df_2017 = df[df['issue_date'].astype(str).str.contains("2017")]
+df_2017.head()
+```
+
+As in the `issue_date`, the only four-consecutive-letter means year, therefore I use `str.contains` to select data in 2017.
+
+```{python}
+
+print(f"""
+      There are {len(df_2017)} tickets issued in 2017.
+      Then it implies that there are {len(df_2017) * 100} tickets issued in the full data in 2017.
+      According to ProPublic, more than 3 million tickets are released each year.
+      And I think it is a meaningful difference.""")
+
+```
+
+
+
+2.  
+```{python}
+
+# Count the occurrences of each violation code
+violation_counts = df['violation_description'].value_counts().reset_index()
+violation_counts.columns = ['violation_description', 'frequency']
+top_20_violations = violation_counts.head(20)
+
+# Create a bar graph using Altair
+```
+
+I ask ChatGPT on how to write x-lable, y-lable, title in altair, and how to rotate x-lable for readability.
+
+```{python}
+import altair as alt
+alt.Chart(top_20_violations).mark_bar(color='skyblue').encode(
+    x=alt.X('violation_description:N', sort='-y', title='Violation Description'),
+    y=alt.Y('frequency:Q', title='Frequency')
+).properties(
+    title='Top 20 Violation Types',
+    width=600,
+    height=400
+).configure_axis(
+    labelAngle=-45  # Rotate x labels for better readability
+)
+```
+
+
+
+The top 20 violation types are:
+
+EXPIRED PLATES OR TEMPORARY REGISTRATION
+
+STREET CLEANING
+
+RESIDENTIAL PERMIT PARKING
+
+EXP. METER NON-CENTRAL BUSINESS DISTRICT
+
+PARKING/STANDING PROHIBITED ANYTIME
+
+EXPIRED METER OR OVERSTAY
+
+REAR AND FRONT PLATE REQUIRED
+
+NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS
+
+RUSH HOUR PARKING
+
+NO CITY STICKER OR IMPROPER DISPLAY
+
+EXPIRED METER CENTRAL BUSINESS DISTRICT
+
+NO STANDING/PARKING TIME RESTRICTED
+
+WITHIN 15' OF FIRE HYDRANT
+
+PARK OR STAND IN BUS/TAXI/CARRIAGE STAND
+
+TRUCK,RV,BUS, OR TAXI RESIDENTIAL STREET
+
+STREET CLEANING OR SPECIAL EVENT
+
+DOUBLE PARKING OR STANDING
+
+EXPIRED PLATE OR TEMPORARY REGISTRATION
+
+STOP SIGN OR TRAFFIC SIGNAL
+
+PARK OR BLOCK ALLEY.
+
+And the bar graph is shown above.
+
+
+# Visual Encoding (15 Points)
+
+1.
+```{python}
+print(df.dtypes)
+```
+
+```{python}
+df.head(1)
+```
+
+```{markdown}
+
+| Variable Name          | Variable Type(s)       | Note  |
+|------------------------|------------------------|-------|
+| Unnamed: 0             | Ordinal & Quantitative | The data is a number, so it is Quantitative. But this number is used for cllasification or rank, so this is an Ordinal.|
+| ticket_number          | Ordinal & Quantitative | The data is a number, so it is Quantitative. But this number is used for cllasification or rank, so this is an Ordinal.|
+| issue_date             | Temporal               | N/A   |
+| violation_location     | Nominal                | N/A   |
+| license_plate_number   | Nominal                | N/A   |
+| license_plate_state    | Nominal                | N/A   |
+| license_plate_type     | Nominal                | N/A   |
+| zipcode                | Ordinal & Quantitative | The data is a number, so it is Quantitative. But this number is used for cllasification or rank, so this is an Ordinal.|
+| violation_code         | Nominal                | N/A   |
+| violation_description  | Nominal                | N/A   |
+| fine_level2_amount     | Quantitative           | N/A   |
+| unit                   | Quantitative           | N/A   |
+| total_payments         | Quantitative           | N/A   |
+| current_amount_due     | Quantitative           | N/A   |
+| ticket_queue           | Nominal                | N/A   |
+| ticket_queue_date      | Temporal               | N/A   |
+| notice_level           | Nominal                | N/A   |
+| hearing_disposition    | Nominal                | N/A   |
+| notice_number          | Ordinal & Quantitative | The data is a number, so it is Quantitative. But this number is used for cllasification or rank, so this is an Ordinal.|
+| officer                | Ordinal                | N/A   |
+| address                | Nominal                | N/A   |
+```
+
+2.
+
+```{python}
+df2 = df.copy()
+df2['ticket_queue'] = df2['ticket_queue'].apply(lambda x: 1 if x == 'Paid' else 0)
+df2 = df2.groupby('vehicle_make')['ticket_queue'].mean().reset_index()
+df2 = df2.sort_values(by = 'ticket_queue', ascending=False)
+
+alt.Chart(df2).mark_bar(color='skyblue').encode(
+    x=alt.X('vehicle_make:N', sort='-y', title='Vehicle Make'),
+    y=alt.Y('ticket_queue:Q', title='Ticket Queue')
+).properties(
+    title='Fraction of Tickets Parid by Vehicle Make (Bar Chart)',
+
+).configure_axis(
+    labelAngle=-80  # Rotate x labels for better readability
+)
+
+```
+
+We can observe that vehicle makes like `ASTO` and `WILS` have a 100 percentage ticket payment rate, while others like `BENE` and `CITR` have a 0 percentage payment rate. I believe there are at least two reasons behind. First, soieconomic status likely plays a role, as owners of certain vehicles are more inclined to follow regulations and pay tickets promptly. Second, insurance requirement could be a factor. Some vehicle makes may have a closer link between insurance registration and the violation processes,prompting owners to pay tickets on time.
+
+3.
+
+If the date like `2007-01-01 00:00:21`, then there will be a mistake on too many data. With error: alt.data_transformers.enable("vegafusion").
+
+So I convert datetime to monthly form like `2007-01-01`, `2007-02-01`
+
+```{python}
+import pandas as pd
+
+df = pd.read_csv('/Users/wsjsmac/Desktop/Autumn/PPHA 30538/problem-set-1-sijiewu12/Pset 1/data/parking_tickets_one_percent.csv')
+
+source = df.copy()
+```
+
+I count the number of tickets issued per date. For this code, I employ ChatGPT by asking "how to count the number of tickets issued over time". And I `pip install "vegafusion[embed]>=1.5.0"`, `pip install "vl-convert-python>=1.6.0"`
+
+```{python}
+
+# Convert issue_date to datetime
+source['issue_date'] = pd.to_datetime(source['issue_date'])
+
+# Group by issue_date and count the number of tickets per date
+ticket_counts_date = source.groupby(source['issue_date'].dt.date).size().reset_index(name='ticket_count')
+
+print(ticket_counts_date)
+```
+```{python}
+
+# Extract month and year from issue_date for grouping
+source['issue_date'] = pd.to_datetime(source['issue_date'])
+source['issue_month'] = source['issue_date'].dt.to_period('M')
+
+# Group by issue_month and count the number of tickets per month
+ticket_counts_month = source.groupby('issue_month').size().reset_index(name='ticket_count')
+
+# Convert issue_month back to timestamp for clarity
+ticket_counts_month['issue_month'] = ticket_counts_month['issue_month'].dt.to_timestamp()
+print(ticket_counts_month)
+```
+
+I use ChatGPT with rename X-label = Time, and Y-lable = Ticket Amount. Add a title of "the number of tickets issued over time"
+
+```{python}
+
+alt.Chart(ticket_counts_month).mark_area(
+    color="lightblue",
+    interpolate='step-after',
+    line=True
+).encode(
+    x=alt.X('issue_month:T', title='Time'),
+    y=alt.Y('ticket_count:Q', title='Ticket Amount')
+).properties(
+    title='The Number of Tickets Issued Over Month'
+)
+```
+
+
+4. I use the sum of the tickets each day as the Y-axis of the heatmap.
+```{python}
+import altair as alt
+
+source = ticket_counts_date.copy()
+
+source['issue_date'] = pd.to_datetime(source['issue_date'], errors='coerce')
+
+alt.Chart(source, title="Tickets Issued By Month and Day").mark_rect().encode(
+    alt.X("date(issue_date):O").title("Day").axis(format="%e", labelAngle=0),
+    alt.Y("month(issue_date):O").title("Month"),
+    alt.Color("sum(ticket_count)").title(None),
+    tooltip=[
+        alt.Tooltip("monthdate(issue_date)", title="Date"),
+        alt.Tooltip("sum(ticket_count)", title="Ticket Count"),
+    ],
+).configure_view(
+    step=13,
+    strokeWidth=0
+).configure_axis(
+    domain=False
+)
+```
+
+
+
+
+
+
+
+5. 
+   
+From the question 2 of the section Cleaning the data and benchmaching, we know that, the top 5 violation types are
+
+EXPIRED PLATES OR TEMPORARY REGISTRATION
+
+STREET CLEANING
+
+RESIDENTIAL PERMIT PARKING
+
+EXP. METER NON-CENTRAL BUSINESS DISTRICT
+
+PARKING/STANDING PROHIBITED ANYTIME.
+```{python}
+import altair as alt
+
+source = df.copy()
+source = source[["issue_date", "violation_description"]]
+source['issue_date'] = pd.to_datetime(source['issue_date'])
+source['issue_month'] = source['issue_date'].dt.to_period('M')
+ticket_counts_month = source.groupby(['issue_month', 'violation_description']).size().reset_index(name='ticket_count')
+ticket_counts_month['issue_month'] = ticket_counts_month['issue_month'].dt.to_timestamp()
+
+
+
+ticket_counts_month = ticket_counts_month[
+    (ticket_counts_month['violation_description'] == "EXPIRED PLATES OR TEMPORARY REGISTRATION") |
+    (ticket_counts_month['violation_description'] == "STREET CLEANING") |
+    (ticket_counts_month['violation_description'] == "RESIDENTIAL PERMIT PARKING") |
+    (ticket_counts_month['violation_description'] == "EXP. METER NON-CENTRAL BUSINESS DISTRICT") |
+    (ticket_counts_month['violation_description'] == "PARKING/STANDING PROHIBITED ANYTIME")
+]
+
+
+
+color_condition = alt.condition(
+    "month(datum.value) == 1 && date(datum.value) == 1",
+    alt.value("black"),
+    alt.value(None),
+)
+
+
+alt.Chart(ticket_counts_month, width=300, height=100).transform_filter(
+    alt.datum.symbol != "GOOG"
+).mark_rect().encode(
+    alt.X("yearmonthdate(issue_month):O")
+        .title("Time")
+        .axis(
+            format="%Y",
+            labelAngle=0,
+            labelOverlap=False,
+            labelColor=color_condition,
+            tickColor=color_condition,
+        ),
+    alt.Y("violation_description:N").title(None),
+    alt.Color("sum(ticket_count)").title("Price")
+)
+
+```
+
+6.
+
+The Filled Step Chart illustrates the trend of ticket amounts over time, and it contains data of two dimensions - time and ticket amount. However, this plot only aggregates data on a monthly basis and is unable to handle daily data due to the scale being too large.
+
+The Heatmap hightlights the differences across various dates, allowing us to compare the ticket amounts on the same date across different months, or across different date within the same month. And the gradient color scheme makes chart highly intuitive. But it falls short in showing the trends or the changes over the years.
+
+The Lasagna Plot illustrates the changes over time, and allows us to compare the different tickets amount across different vehicle makes. Howevert, its limitation is that it only aggregats data on a monthly basis, making it unable to handle daily data due to the scale being too large. 
+
+
+7.
+
+I believe the Heatmap is the best way to display the differences across time, as it allows for both vertical and horizontal comparisons. This provides readers with an intuitive understanding of the variance in enforcement of violations.
+
+

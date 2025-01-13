@@ -1,0 +1,757 @@
+---
+title: "Pset 2"
+author: "Sijie Wu"
+date: Oct 19 2024
+format: 
+  html:
+    toc: true
+    number-sections: true
+    html-math-method: katex
+    code-overflow: wrap
+execute:
+  eval: true 
+  echo: true 
+---
+
+1. **PS1:** Due Sat Oct 5 at 5:00PM Central. Worth 50 points. Initiate your **[repo](https://classroom.github.com/a/uhUVze3Y)** 
+
+We use (`*`) to indicate a problem that we think might be time consuming. 
+
+Steps to submit (5 points on PS1 and 10 points on PS2)
+
+1. "This submission is my work alone and complies with the 30538 integrity
+policy." Add your initials to indicate your agreement: \*\*\S\W\*\*
+2. "I have uploaded the names of anyone I worked with on the problem set **[here](https://docs.google.com/forms/d/1-zzHx762odGlpVWtgdIC55vqF-j3gqdAp6Pno1rIGK0/edit)**"  \*\*\_\_\*\* (1 point)
+3. Late coins used this pset: \*\*\_\_\*\* Late coins left after submission: \*\*\_\_\*\*
+4. Knit your `ps1.qmd` to make `ps1.pdf`. 
+    * The PDF should not be more than 25 pages. Use `head()` and re-size figures when appropriate. 
+5. Push  `ps1.qmd` and `ps1.pdf` to your github repo. It is fine to use Github Desktop.
+6. Submit `ps1.pdf` via Gradescope (4 points) 
+7. Tag your submission in Gradescope
+
+# Data cleaning continued (15 Points)
+```{python}
+import pandas as pd
+import altair as alt
+alt.data_transformers.enable("vegafusion")
+import warnings
+warnings.filterwarnings('ignore')
+file_path = '/Users/wsjsmac/Desktop/Autumn/PPHA 30538/student30538/problem_sets/ps2/data/parking_tickets_one_percent.csv'
+df = pd.read_csv(file_path)
+df.head()
+```
+
+1.  
+```{python}
+def get_na_count(df):
+    na_count = df.isna().sum()
+    na_count_df = pd.DataFrame(
+        {'column_name': na_count.index, 'na_count': na_count.values})
+    return na_count_df
+
+
+df_na = get_na_count(df)
+
+print(df_na)
+
+```
+
+```{python}
+for index, row in df_na.iterrows():
+    na_count = row['na_count']
+    column = row['column_name']
+
+    if na_count > 0:
+        print(f"There are {na_count} NA values in the column '{column}'.")
+
+print(f"""For other columns not listed, there exists no NA.
+  """)
+```
+
+2.  
+
+`Hearing Disposition`, `Notice Level`, and `Zipcode` have missing values more frequently than others.
+
+Accoding to the data dictionary, `Hearing Disposition` is outcome of a hearing, either “Liable” or “Not Liable.” If the ticket was not contested this field is blank. `Notice Level` describes the type of notice the city has sent a motorist. If the field is blank, no notice was sent. `Zipcode` is missing may be the reason of lack of `Notice Level`.
+
+
+3.  
+
+
+In VS Code, using the section JUPYTER to open the variable snapshot in data viewer, I filter the column `violation_description` with "CITY STICKER", and find two main types: "NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS.", (56%) and "NO CITY STICKER OR IMPROPER DISPLAY" (42%). And for both types of violation code, I look on their `issue_date` correspondingly.
+
+The old description is "NO CITY STICKER OR IMPROPER DISPLAY", with violation code `0964125` and `0976170` (whose proportion is less than 1%).
+
+The new description is "NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS.", with violation code `0964125B`, and "NO CITY STICKER VEHICLE OVER 16,000 LBS.", with violation code `0964125C`.
+
+4.  
+
+For old code, "NO CITY STICKER OR IMPROPER DISPLAY", its initial cost for level 1 is 120, and the initial cost for level 2 is 240.
+
+For new code, "NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS.", its initial cost for level 1 is 200, and the initial cost for level 2 is 400.
+
+
+# Revenue increase from “missing city sticker” tickets (35 Points)
+
+1.  
+
+
+## Combine codes
+```{python}
+df['violation_code_combined'] = df['violation_code'].replace(
+    ['0964125', '0976170', '0964125B', '0964125C'],
+    '0964125A'
+)
+```
+
+I combine violation code for `NO CITY STICKER OR IMPROPER DISPLAY` (`0964125` and `0976170`), `NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS.`, (`0964125B`) and `NO CITY STICKER VEHICLE OVER 16,000 LBS.` (`0964125C`), to a new code `0964125A`. And to create a new column named `violation_code_combined` to save the code information.
+
+
+## Collapse data by month
+
+
+```{python}
+df['issue_date'] = pd.to_datetime(df['issue_date'])
+missing_city_sticker_df = df[df['violation_code_combined'] == '0964125A']
+missing_city_sticker_df['month'] = missing_city_sticker_df['issue_date'].dt.to_period(
+    'M')
+ticket_counts_by_month = missing_city_sticker_df.groupby(
+    'month').size().reset_index(name='ticket_count')
+ticket_counts_by_month['month'] = ticket_counts_by_month['month'].dt.to_timestamp()
+
+```
+
+```{python}
+base = alt.Chart(ticket_counts_by_month).mark_line().encode(
+    alt.X('month:T'),
+    alt.Y('ticket_count:Q')
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+
+base
+```
+
+2.  
+
+```{python}
+# By reading and filtering the data, the price change date is 2012-02-25.
+highlight = alt.Chart(pd.DataFrame({'date': ['2012-02-24']})).mark_rule(color='red').encode(
+    x='date:T'
+)
+label = alt.Chart(pd.DataFrame({
+    'date': ['2012-02-24'],
+    'label': ['24 Feb 2012']
+})).mark_text(align='left', dx=5, dy=120, color='red').encode(
+    x='date:T',
+    text='label:N'
+)
+
+chart = base + highlight + label
+chart
+```
+
+I use the [Specifying Data-Marks-Text](https://altair-viz.github.io/user_guide/marks/text.html) page for help. 
+
+3.  
+
+First, calculate how many tickets are issued from 2007 to 2011, then calculate the average tickets issued annually.
+
+Second, multiply the number of tickets annually with the increment of price and get the revenue increase.
+
+Third, multiply the amount in Step 2 with 100 to get the total amount.
+
+```{python}
+# Filtering the data for tickets issued before 2012-01-01
+filtered_df = missing_city_sticker_df[(
+    missing_city_sticker_df['issue_date'] < '2012-01-01') & (missing_city_sticker_df['issue_date'] >= '2011-01-01')]
+
+# Counting the number of tickets per year before 2012 Jan
+ticket_count_per_year = filtered_df['issue_date'].count()
+min_revenue_increase = ticket_count_per_year * 80
+max_revenue_increase = ticket_count_per_year * 160
+print(f'''
+    The tickets issued the calendar year before the policy change are {ticket_count_per_year*100/1_000_000:.2f} million.
+    The ticket has different fine levels and its increase amount differs. If it has fine level 1, the ticket amount will be 120 before policy change and 200 after policy change, and the increase per ticket will be 80. If it has fine level 2, the ticket amount will be 240 before policy change and 400 after policy change, and the increase per ticket will be 160.
+    We here suppose all the tickets has fine level 1, and calulate the minimal bound. Then suppose all the tickets has fine level 2, and calulate the maximal bound. 
+    Assume the number of tickets issued is the same before and after the policy change, then after the price change policy, the revenue will increase at least ${min_revenue_increase*100/1_000_000:.2f} million and at most ${max_revenue_increase*100/1_000_000:.2f} million. Since not all the tickets are fined on level 1, the raised revenue will be over the expected $16 million increase.
+    ''')
+```
+
+
+
+
+4.  
+
+```{python}
+filtered_df1 = missing_city_sticker_df[(
+    missing_city_sticker_df['issue_date'] < '2012-01-01') & (missing_city_sticker_df['issue_date'] >= '2011-01-01')]
+
+payment_rate_before = filtered_df1[filtered_df1['ticket_queue'] ==
+                                   "Paid"]['ticket_queue'].count() / filtered_df1['ticket_queue'].count()
+
+
+filtered_df2 = missing_city_sticker_df[(
+    missing_city_sticker_df['issue_date'] < '2014-01-01') & (missing_city_sticker_df['issue_date'] >= '2013-01-01')]
+
+payment_rate_after = filtered_df2[filtered_df2['ticket_queue'] ==
+                                  "Paid"]['ticket_queue'].count() / filtered_df2['ticket_queue'].count()
+
+ticket_count_per_year = filtered_df['issue_date'].count()
+
+ticket_count_per_year_paid = ticket_count_per_year * payment_rate_after
+
+min_revenue_increase = ticket_count_per_year_paid * 80
+max_revenue_increase = ticket_count_per_year_paid * 160
+
+
+# Suppose the level 2 fine is above x% that the revenue increase will be over $16 million. Use this equation to solve the proportion.
+# equation is that:
+# (x * 160 + (1 - x) * 80) * payment_rate_after = 16
+
+# Solve the equation
+x = (16*1000000/(ticket_count_per_year_paid*100)-80)/(160-80)
+
+
+print(f'''
+    The payment rate the calendar year after the policy change is {payment_rate_after:.2%}.
+
+    The payment rate the calendar year before the policy change is {payment_rate_before:.2%}.
+
+    So the payment rate decreases after the policy change.
+
+    The paid tickets issued the calendar year after the policy change are {ticket_count_per_year_paid*100:,.0f}.
+    
+    Considering the ticket paymet rate, after the price change policy, the revenue will increase at least ${min_revenue_increase*100/1_000_000:.2f} million and at most ${max_revenue_increase*100/1_000_000:.2f} million.
+
+    Since $16 million is between the interval, we need to consider the proportion of level 1 and level 2 fine tickets. When the proportion of paid fine level 2 is above {x:.2%}, the raised revenue will be over the expected $16 million .
+    ''')
+```
+
+
+
+5.  
+
+```{python}
+
+filtered_payment_rate = missing_city_sticker_df[['issue_date', 'ticket_queue']]
+filtered_payment_rate['month'] = filtered_payment_rate['issue_date'].dt.to_period(
+    'M')
+# Calculate monthly totals
+monthly_totals = filtered_payment_rate.groupby(
+    'month')['ticket_queue'].value_counts().unstack(fill_value=0)
+
+# Calculate the payment rate
+monthly_totals['total'] = monthly_totals.iloc[:, :7].sum(axis=1)
+monthly_totals['payment_rate'] = (
+    monthly_totals['Paid'] / monthly_totals['total'])
+print(monthly_totals['payment_rate'])
+
+monthly_totals.reset_index(inplace=True)
+monthly_totals.rename(columns={'index': 'month'}, inplace=True)
+
+monthly_totals['month'] = monthly_totals['month'].dt.to_timestamp()
+
+base = alt.Chart(monthly_totals).mark_line().encode(
+    alt.X('month:T', title='Month', timeUnit='yearmonth'),
+    alt.Y('payment_rate:Q', title='Payment Rate')
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+highlight = alt.Chart(pd.DataFrame({'date': ['2012-02-24']})).mark_rule(color='red').encode(
+    x='date:T'
+)
+label = alt.Chart(pd.DataFrame({
+    'date': ['2012-02-24'],
+    'label': ['24 Feb 2012']
+})).mark_text(align='left', dx=5, dy=120, color='red').encode(
+    x='date:T',
+    text='label:N'
+)
+
+chart = base + highlight + label
+chart
+
+
+```
+
+Comparing the payment rates before and after the policy change reveals a noticeable decline in the payment rate following the implementation of the new policy. This decline may be attributed to the increased fines, which may lead drivers to exercise greater caution to avoid receiving tickets. Consequently, when drivers do receive a ticket, the higher fines may discourage them from making payments.
+
+6.  
+
+For each violation type, plot the number of tickets and the payment rate from 2007 Jan to 2018 May.
+
+```{python}
+ticket_counts = df.groupby('violation_description')[
+    'ticket_queue'].count().reset_index(name='ticket_count')
+
+payment_rates = df.groupby('violation_description').apply(
+    lambda x: (x['ticket_queue'] == 'Paid').sum() / x['ticket_queue'].count()
+).reset_index(name='payment_rate')
+
+# fine_amount = df[['violation_description',
+#                  'fine_level1_amount']].drop_duplicates()
+
+violation_type = pd.merge(ticket_counts, payment_rates,
+                          on='violation_description')
+# violation_type = pd.merge(fine_amount, violation_type,
+#                          on='violation_description')
+
+
+violation_type = violation_type.sort_values(by='ticket_count', ascending=False)
+violation_type_top_20 = violation_type.head(20)
+violation_type_top_20 = violation_type_top_20.reset_index(drop=True)
+
+chart = alt.Chart(violation_type_top_20).mark_point(filled=True).encode(
+    alt.X('ticket_count:Q', title='Ticket Count', scale=alt.Scale(zero=False)),
+    alt.Y('payment_rate:Q', title='Payment Rate', scale=alt.Scale(zero=False)),
+    alt.Color('violation_description:N'),
+    #    alt.Size('fine_amount:Q',scale=alt.Scale(range=[0,1000])),
+    # Optional: Add tooltip for better insight
+    tooltip=['violation_description', 'ticket_count', 'payment_rate']
+).properties(
+    title='Top 20 Violation Types: Ticket Count vs. Payment Rate',
+    width=250,  # set the width
+    height=250  # set the height
+
+)
+
+chart
+
+```
+
+I will choose `Expired plates or temporary registration`, `Street cleaning`, and `Exp. meter non-central business district` as the three violation types to increase ticket price.
+
+The category `Expired Plates or Temporary Registration` accounts for the highest ticket count, totaling approximately 50,000, which exceeds the second-largest category by over 20,000 tickets. Additionally, a green dot labeled `Expired Plate or Temporary Registration` (without `s` for `Plate`) is positioned in the lower left corner, further highlighting this significant number. Notably, this category also exhibits a payment rate exceeding 60%, indicating a relatively high compliance level.
+
+`Street cleaning` boasts the highest payment rate and ranks second in terms of ticket volume.
+
+`Exp. meter non-central business district` ranks fourth in both ticket count and payment rate. Its payment rate is approximately 80%, with the total number of tickets exceeding 20,000.
+
+# Headlines and sub-messages (20 points)
+
+1.  
+
+
+```{python}
+# paid_violation = paid_fraction.groupby('violation_description')['fine_level1_amount']
+df['ticket_queue_date'] = pd.to_datetime(df['ticket_queue_date'])
+
+fine_amount = df.groupby('violation_description')[
+    'fine_level1_amount'].mean().reset_index()
+fine_amount.rename(
+    columns={'fine_level1_amount': 'average_fine_amount'}, inplace=True)
+
+ticket_counts = df.groupby('violation_description')[
+    'ticket_queue'].count().reset_index(name='ticket_count')
+
+payment_rates = df.groupby('violation_description').apply(
+    lambda x: (x['ticket_queue'] == 'Paid').sum() / x['ticket_queue'].count()
+).reset_index(name='payment_rate')
+
+
+df['paid_time'] = df['ticket_queue_date'] - df['issue_date']
+df['paid_time'] = df['paid_time'].dt.days
+# only for paid ticket, calculate the mean paid time
+paid_df = df[df['ticket_queue'] == 'Paid']
+paid_time = paid_df.groupby('violation_description')[
+    'paid_time'].mean().reset_index()
+paid_time.rename(columns={'paid_time': 'average_paid_time'}, inplace=True)
+
+```
+
+
+```{python}
+paid_fraction = pd.merge(fine_amount, ticket_counts,
+                         on='violation_description')
+paid_fraction = pd.merge(paid_fraction, payment_rates,
+                         on='violation_description')
+paid_fraction = pd.merge(paid_fraction, paid_time,
+                         on='violation_description')
+
+#
+
+paid_fraction = paid_fraction.sort_values(by='ticket_count', ascending=False)
+paid_fraction = paid_fraction.reset_index(drop=True)
+
+print(paid_fraction.head(5))
+```
+
+
+2.  
+
+
+```{python}
+paid_fraction_filtered = paid_fraction[paid_fraction['ticket_count'] > 100]
+
+chart = alt.Chart(paid_fraction_filtered).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate'),
+    alt.Color('violation_description:N'),
+    tooltip=['violation_description', 'average_fine_amount', 'payment_rate']
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+
+chart
+```
+
+The outlier is `NO CITY STICKER VEHICLE OVER 16,000 LBS.`, so drop it.
+
+```{python}
+
+paid_fraction_filtered = paid_fraction_filtered[paid_fraction_filtered['violation_description']
+                                                != 'NO CITY STICKER VEHICLE OVER 16,000 LBS.']
+
+chart = alt.Chart(paid_fraction_filtered).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate'),
+    alt.Color('violation_description:N'),
+    tooltip=['violation_description', 'average_fine_amount', 'payment_rate']
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+
+chart
+```
+
+Then draw another two plots to show the relationship between fine amount and the fraction of ticket paid.
+
+```{python}
+chart1 = alt.Chart(paid_fraction_filtered).mark_rect().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount', bin=alt.Bin(maxbins=70)),
+    alt.Y('payment_rate:Q', title='Payment Rate', bin=alt.Bin(maxbins=70)),
+    alt.Color('count()', scale=alt.Scale(scheme='blues'))).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+chart1
+```
+
+```{python}
+chart2 = alt.Chart(paid_fraction_filtered).mark_boxplot().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount', bin=alt.Bin(maxbins=5)),
+    alt.Y('payment_rate:Q', title='Payment Rate')).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+chart2
+
+```
+
+```{python}
+####Scatter point bin=True
+#chart3 = alt.Chart(paid_fraction_filtered).mark_circle().encode(
+#    alt.X('average_fine_amount:Q', title = 'Fine Amount', bin = alt.BinParams(maxbins=15)),
+#    alt.Y('payment_rate:Q', title = 'Payment Rate')
+#)
+
+#chart3
+```
+
+
+| Index | Plot name | Headlines | Sub-messages |
+|------|------|------|------|
+| 1 | Scatter point | There is a cluster of dots around $40 fine amount and 70% payment rate. | The largest fines is $217, and the violation type is `Disabled parking zone`. The largest payment rate is 83% for `Industrial permit parking`. |
+| 2 | Rectangle with color | There are 4 count records for payment rate around 70% and fine amount around $60. They have the darkest color. | Most counts of records are 1, with only 4 instances having a count of records of 2. |
+| 3 | Boxplot | As fine amount increases, the trend of mean payment rate goes down. | Records between $50 and $100 is quite disperse, while records between $150 and $250 is far more concentrated. |
+
+: Headlines & Sub-messages {tbl-colwidths="[5,15, 40, 40]"}
+
+
+3.  
+
+I plan to present the scatter chart to the City Clerk, which distinguishes each voilation type using different colors and displays the fine amount and payment rate on x-axis and y-axis, respectively. This plot offers a clearer and more vivid illustration of the relationship between fine amount and payment rate.
+
+
+# Understanding the structure of the data and summarizing it (Lecture 5, 20 Points)
+1.  
+
+```{python}
+import numpy as np
+violation_double = df[['violation_description',
+                       'fine_level1_amount', 'fine_level2_amount']]
+
+
+violation_double['double'] = np.where(
+    violation_double['fine_level2_amount'] == 2 * violation_double['fine_level1_amount'], 1, 0)
+
+grouped_violation = violation_double[violation_double['double'] == 0].groupby(
+    'violation_description').size().reset_index(name='count')
+
+# Step 3: Create the 'over_100' column
+grouped_violation['over_100'] = np.where(
+    grouped_violation['count'] >= 100, 1, 0)
+
+# Merge the result back to the original dataframe if you want the 'over_100' column in the original dataframe
+violation_double = violation_double.merge(grouped_violation[[
+                                          'violation_description', 'over_100']], on='violation_description', how='left')
+
+
+violation_double = violation_double.drop_duplicates()
+
+# Reset index
+violation_double = violation_double.reset_index(drop=True)
+```
+
+That double in price if unpaid doesn't hold for all the violation types. After the data process above, in Data Wrangle, I filter `double` equal to 0 to select the violation type that fine is not doubled if unpaid (value of `fine_level2_amount` != value of `fine_level1_amount`). Then filter `over_100` equal to 1 to select the violation type that its citations is at least 100.
+
+I find 4 violation types that meet the conditions. They are: `Disabled parking zone`, `Park or block alley`, `Block assess/alley/friveway/firelane`, and `Smoked/tinted windows parked/ standing`.
+
+`Disabled parking zone` will increase $50, `Park or block alley` will icrease $100, `Block assess/alley/friveway/firelane` will increase $100, `Smoked/tinted windows parked/ standing` will increase $0.
+
+2.  
+
+![Process of moving between the different values of `notice_level`](Notice level.png)
+
+![Process of moving between the different values of `ticket_queue`](Ticket queue.png)
+
+3.  
+
+## a)
+```{python}
+chart = alt.Chart(paid_fraction_filtered).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate'),
+    alt.Color('violation_description:N')
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+text = chart.mark_text(
+    align='left',
+    dx=5,  # Adjusts the text position
+    dy=-5  # Adjusts the text position
+).encode(
+    text='violation_description:N'
+)
+plot = chart + text
+plot
+```
+
+Too many texts and it's not beautiful.
+
+## b)
+
+```{python}
+chart = alt.Chart(paid_fraction_filtered).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate'),
+    alt.Color('violation_description:N')
+).properties(
+    width=250,
+    height=250
+).configure_legend(
+    orient='right'   # Position the legend on the right
+)
+chart
+```
+
+Much better, but the legend cann't show fully.
+
+## a) revised
+The 10th largest ticket counts is 10773, and I will set those ticket counts less than 10773 labeled `Others`.
+```{python}
+
+# paid_fraction_filtered = paid_fraction_filtered.drop(columns=['Top_10'])
+
+paid_fraction_filtered['Top_10'] = np.where(
+    paid_fraction_filtered['ticket_count'] < 10773, 'Others', paid_fraction_filtered['violation_description'])
+```
+
+```{python}
+chart = alt.Chart(paid_fraction_filtered.head(10)).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate')
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+text = chart.mark_text(
+    align='center',
+    dx=10,  # Adjusts the text position
+    dy=10  # Adjusts the text position
+).encode(
+    text='Top_10:N'
+)
+plot = chart + text
+plot
+```
+
+But the labeled texts are still illegible in my plot. I choose to use `toolkip` instead.
+
+```{python}
+chart = alt.Chart(paid_fraction_filtered.head(10)).mark_circle().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount',
+          scale=alt.Scale(zero=False)),
+    alt.Y('payment_rate:Q', title='Payment Rate', scale=alt.Scale(zero=False)),
+    alt.Color('violation_description:N'),
+    tooltip=['violation_description', 'average_fine_amount', 'payment_rate']
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+chart
+```
+
+## b) revised
+
+```{python}
+
+# paid_fraction_filtered = paid_fraction_filtered.drop(columns=['short_description'])
+
+conditions = [
+    paid_fraction_filtered['violation_description'].isin([
+        'EXPIRED PLATES OR TEMPORARY REGISTRATION',
+        'EXPIRED PLATE OR TEMPORARY REGISTRATION',
+        'REAR AND FRONT PLATE REQUIRED',
+        'NONCOMPLIANT PLATE(S)',
+        'MISSING/NONCOMPLIANT FRONT AND/OR REAR PLATE',
+        'REAR PLATE REQUIRED MOTORCYCLE/TRAILER',
+        "REAR PLATE LIT AND LEGIBLE FOR 50'",
+        'FRONT PLATE REQUIRED FOR TRUCK TRACTORS'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'EXPIRED METER OR OVERSTAY',
+        'EXPIRED METER CENTRAL BUSINESS DISTRICT',
+        'EXP. METER NON-CENTRAL BUSINESS DISTRICT'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'NO CITY STICKER VEHICLE UNDER/EQUAL TO 16,000 LBS.',
+        'NO CITY STICKER OR IMPROPER DISPLAY',
+        'IMPROPER DISPLAY OF CITY STICKER'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'STREET CLEANING',
+        'TRUCK,RV,BUS, OR TAXI RESIDENTIAL STREET',
+        'STREET CLEANING OR SPECIAL EVENT',
+        'TRUCK,MOTOR HOME, BUS BUSINESS STREET'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'TRUCK TRAILOR/SEMI/TRAILER PROHIBITED',
+        'TRUCK OR SEMI-TRAILER PROHIBITED',
+        "2 REAR TRAILER LAMPS REQ'D VISIBLE 500'",
+        'TWO RED REAR TRAILER REFLECTORS REQUIRED'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'CURB LOADING ZONE',
+        "WRONG DIRECTION OR 12'' FROM CURB",
+        'DISABLED CURB CUT'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'SERVICE BRAKES:STOPPING CAPABILITY',
+        'BRAKES REQUIRED IN GOOD WORKING ORDER',
+        'HAND BRAKES:PROPER STOPPING CAPABILITY',
+        'BRAKES REQUIRED DURING OPERATION'
+    ]),
+    paid_fraction_filtered['violation_description'].isin([
+        'BLOCK ACCESS/ALLEY/DRIVEWAY/FIRELANE',
+        'BLOCK ALLEY'
+    ]),
+    paid_fraction_filtered['violation_description'].str.contains(
+        'PARK', na=False)
+]
+
+
+choices = [
+    'Plates',
+    'Expired Meter',
+    'No City Sticker',
+    'Street Cleaning',
+    'Trailer',
+    'Curb',
+    'Breaks',
+    'Block',
+    'Park'
+]
+
+
+paid_fraction_filtered['short_description'] = np.select(
+    conditions, choices, default='Others')
+
+```
+
+
+```{python}
+chart = alt.Chart(paid_fraction_filtered).mark_circle().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount'),
+    alt.Y('payment_rate:Q', title='Payment Rate'),
+    alt.Color('short_description:N')
+).properties(
+    width=250,
+    height=250
+).configure_legend(
+    orient='right'   # Position the legend on the right
+)
+chart
+```
+
+And in this case, if we lable the top 10 violation type on the plot as instructed in a), it will look like this:
+```{python}
+chart = alt.Chart(paid_fraction_filtered.head(10)).mark_point().encode(
+    alt.X('average_fine_amount:Q', title='Fine Amount',
+          scale=alt.Scale(zero=False)),
+    alt.Y('payment_rate:Q', title='Payment Rate', scale=alt.Scale(zero=False))
+).properties(
+    width=250,  # set the width
+    height=250  # set the height
+)
+text = chart.mark_text(
+    align='left',
+    dx=0,  # Adjusts the text position
+    dy=-10  # Adjusts the text position
+).encode(
+    text='short_description:N'
+)
+plot = chart + text
+plot
+```
+
+still illegible to view :(
+
+# Extra Credit (max 5 points)
+1.  
+
+```{python}
+violation_code_type = df[['violation_description', 'violation_code']]
+violation_code_type = violation_code_type.drop_duplicates()
+violation_code_type = violation_code_type.reset_index(drop=True)
+```
+
+```{python}
+# Group by 'violation_code' and count unique 'violation_description'
+violation_code_description_count = violation_code_type.groupby(
+    'violation_code')['violation_description'].nunique().reset_index()
+
+# Filter for cases where a 'violation_code' corresponds to multiple 'violation_description'
+multiple_descriptions = violation_code_description_count[
+    violation_code_description_count['violation_description'] > 1]
+
+# Create two new columns in 'multiple_descriptions' for storing the first and second unique descriptions
+violation_descriptions_split = (violation_code_type.groupby('violation_code')['violation_description']
+                                # Take the first two unique descriptions
+                                .apply(lambda x: x.unique()[:2])
+                                .reset_index())
+
+# Assign the two descriptions to separate columns
+violation_descriptions_split[['description_1', 'description_2']] = pd.DataFrame(
+    violation_descriptions_split['violation_description'].tolist(), index=violation_descriptions_split.index)
+
+# Merge the split descriptions back into the 'multiple_descriptions' dataframe
+multiple_descriptions = multiple_descriptions.merge(violation_descriptions_split[[
+                                                    'violation_code', 'description_1', 'description_2']], on='violation_code')
+
+# Display the results
+multiple_descriptions
+```
+
+Code `0964040B`, `0964041B`, `0964070`, `0964170D`, `0964200B`, `0976160A`, `0976160B`, `0980110B` has 2 violation descriptions. The associated violation descriptions are above.
+
+It is evident that the violation description is not consistent due to errors such as capitalization, spelling mistakes, missing words, etc.
+
+
+2.  
